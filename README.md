@@ -5,7 +5,7 @@
 ## Routes
 
 - `/` — 고객용 예약 페이지
-- `/admin/login` — 관리자 로그인 (데모 비밀번호: `demo1234`)
+- `/admin/login` — 관리자 로그인 (이메일: `admin@bookflow.app` / 데모 비밀번호: `demo1234`)
 - `/admin/dashboard` — 예약 현황 대시보드
 - `/admin/customers` — 고객 관리
 

@@ -34,13 +34,8 @@ create table if not exists bookings (
 create index if not exists idx_bookings_service_scheduled
   on bookings (service_id, scheduled_at);
 
-create table if not exists admins (
-  id uuid primary key default gen_random_uuid(),
-  email text unique not null,
-  password_hash text not null,
-  name text,
-  created_at timestamptz default now()
-);
+-- Admin identity/sessions live in the `neon_auth` schema (Neon Managed Auth),
+-- provisioned separately by Neon — not created here. See docs/01_db.md §2.4.
 
 create table if not exists notification_logs (
   id uuid primary key default gen_random_uuid(),

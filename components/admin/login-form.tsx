@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { authClient } from "@/lib/auth/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,22 +29,25 @@ export function LoginForm() {
   const [resetSent, setResetSent] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
 
-  function submit() {
+  async function submit() {
     if (!email.trim() || !password.trim()) {
       setError("이메일과 비밀번호를 모두 입력해주세요.");
       return;
     }
     setBusy(true);
     setError(null);
-    // Demo-only auth check: no /api/admin/login endpoint exists yet per 02_api.md.
-    window.setTimeout(() => {
-      if (password !== "demo1234") {
-        setBusy(false);
+    try {
+      const { error: signInError } = await authClient.signIn.email({ email, password });
+      if (signInError) {
         setError("이메일 또는 비밀번호가 올바르지 않습니다.");
-      } else {
-        router.push("/admin/dashboard");
+        return;
       }
-    }, 900);
+      router.push("/admin/dashboard");
+    } catch {
+      setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function openReset() {

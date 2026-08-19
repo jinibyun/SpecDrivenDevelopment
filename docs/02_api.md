@@ -5,7 +5,7 @@
 ## Conventions
 
 - 응답 포맷: `{ data, error }` 형태 통일
-- 인증이 필요한 admin 엔드포인트는 `Authorization: Bearer <session-token>` 필요 (간단 세션 기반, 데모 범위)
+- 인증이 필요한 admin 엔드포인트는 Neon Managed Auth(Better Auth 기반, `neon_auth` 스키마) 세션이 필요. 로그인은 `/api/auth/[...path]`(Neon Auth 핸들러)가 처리하고 세션은 쿠키로 유지된다. admin 라우트는 서버에서 세션을 조회해 없으면 `401 UNAUTHORIZED`를 반환한다 (커스텀 `admins` 테이블/수동 bearer 토큰 방식 아님 — `01_db.md` §2.4 참고)
 - 모든 날짜는 ISO 8601 (`timestamptz`)
 
 ---
@@ -64,9 +64,9 @@
 
 ---
 
-## 4. `GET /api/admin/bookings?status=&date=`
+## 4. `GET /api/admin/bookings?status=&date=&customerId=`
 
-관리자 전용 — 예약 목록 조회 (필터: status, date)
+관리자 전용 — 예약 목록 조회 (필터: status, date, customerId)
 
 **Response 200**
 ```json
@@ -74,6 +74,7 @@
   "data": [
     {
       "id": "uuid",
+      "customerId": "uuid",
       "customerName": "홍길동",
       "serviceName": "상담 30분",
       "scheduledAt": "2026-08-25T10:00:00-04:00",
@@ -82,6 +83,8 @@
   ]
 }
 ```
+
+`customerId`는 고객별 예약 이력 조회용, `customerPhone`/`serviceDurationMinutes`/`servicePrice`는 목록 UI의 보조 정보 표시용 추가 필드(additive).
 
 ---
 
@@ -111,10 +114,12 @@
 ```json
 {
   "data": [
-    { "id": "uuid", "name": "홍길동", "phone": "010-0000-0000", "totalBookings": 3, "noShowCount": 1 }
+    { "id": "uuid", "name": "홍길동", "phone": "010-0000-0000", "email": "hong@example.com", "totalBookings": 3, "noShowCount": 1 }
   ]
 }
 ```
+
+`email`/`lastBookingAt`은 목록·상세 표시용 추가 필드(additive), 둘 다 nullable.
 
 ---
 

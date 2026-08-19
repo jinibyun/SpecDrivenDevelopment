@@ -1,48 +1,51 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
-import { BOOKINGS, CUSTOMERS, getService, type Customer } from "@/lib/mock-data";
+import { fetchJson } from "@/lib/fetch-json";
 import { formatPrice, formatDateTimeFull } from "@/lib/format";
-
-type EnrichedCustomer = Customer & {
-  totalBookings: number;
-  noShowCount: number;
-  lastAt: string | null;
-};
-
-function enrich(customer: Customer): EnrichedCustomer {
-  const bookings = BOOKINGS.filter((b) => b.customerId === customer.id).sort((a, b) =>
-    a.scheduledAt < b.scheduledAt ? 1 : -1
-  );
-  return {
-    ...customer,
-    totalBookings: bookings.length,
-    noShowCount: bookings.filter((b) => b.status === "no_show").length,
-    lastAt: bookings[0]?.scheduledAt ?? null,
-  };
-}
+import type { AdminBooking, AdminCustomer } from "@/lib/types";
 
 export function CustomersContent() {
+  const [customers, setCustomers] = useState<AdminCustomer[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [detailBookings, setDetailBookings] = useState<AdminBooking[] | null>(null);
 
-  const enriched = useMemo(() => CUSTOMERS.map(enrich), []);
+  useEffect(() => {
+    fetchJson<AdminCustomer[]>("/api/admin/customers").then((res) => {
+      if (res.error) setLoadError(res.error.message);
+      else setCustomers(res.data);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!openId) return;
+    fetchJson<AdminBooking[]>(`/api/admin/bookings?customerId=${openId}`).then((res) => {
+      setDetailBookings(res.data ?? []);
+    });
+  }, [openId]);
+
+  function closeDetail() {
+    setOpenId(null);
+    setDetailBookings(null);
+  }
+
+  const all = useMemo(() => customers ?? [], [customers]);
 
   const filtered = useMemo(() => {
     const q = query.trim().replace(/-/g, "");
-    return enriched
+    return all
       .filter((c) => !q || c.name.includes(query.trim()) || c.phone.replace(/-/g, "").includes(q))
-      .sort((a, b) => ((a.lastAt ?? "") < (b.lastAt ?? "") ? 1 : -1));
-  }, [enriched, query]);
+      .sort((a, b) => ((a.lastBookingAt ?? "") < (b.lastBookingAt ?? "") ? 1 : -1));
+  }, [all, query]);
 
-  const detail = enriched.find((c) => c.id === openId) ?? null;
-  const detailBookings = detail
-    ? BOOKINGS.filter((b) => b.customerId === detail.id).sort((a, b) => (a.scheduledAt < b.scheduledAt ? 1 : -1))
-    : [];
+  const detail = all.find((c) => c.id === openId) ?? null;
 
   return (
     <div>
@@ -50,7 +53,7 @@ export function CustomersContent() {
         <div>
           <h1 className="mb-1.25 text-[22px] font-bold tracking-tight">고객</h1>
           <p className="text-[13.5px] text-[#71717A]">
-            등록 고객 {enriched.length}명 · 행을 클릭하면 예약 이력을 볼 수 있습니다.
+            등록 고객 {all.length}명 · 행을 클릭하면 예약 이력을 볼 수 있습니다.
           </p>
         </div>
         <Input
@@ -61,69 +64,85 @@ export function CustomersContent() {
         />
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-[#E4E4E7]">
-        <div className="grid grid-cols-[1.4fr_1.2fr_0.8fr_0.8fr_90px] gap-4 border-b border-[#EFEFF2] bg-[#FAFAFA] px-4.5 py-2.75 text-xs font-semibold text-[#71717A]">
-          <span>이름</span>
-          <span>연락처</span>
-          <span className="text-right">총 예약수</span>
-          <span className="text-right">노쇼 횟수</span>
-          <span className="text-right">이력</span>
+      {loadError && (
+        <div className="mb-6 rounded-[10px] border border-[#FECDCA] bg-[#FFFBFA] px-4 py-3 text-[13px] text-[#B42318]">
+          {loadError}
         </div>
+      )}
 
-        {filtered.map((c, i) => {
-          const risky = c.noShowCount >= 2;
-          return (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setOpenId(c.id)}
-              className={cn(
-                "grid w-full grid-cols-[1.4fr_1.2fr_0.8fr_0.8fr_90px] items-center gap-4 bg-white px-4.5 py-3.25 text-left",
-                i !== filtered.length - 1 && "border-b border-[#F4F4F5]"
-              )}
-            >
-              <div className="flex min-w-0 items-center gap-2.75">
-                <Avatar name={c.name} />
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-[13.5px] font-semibold">{c.name}</span>
-                  <span className="text-[11.5px] text-[#A1A1AA]">
-                    {c.lastAt ? `최근 ${c.lastAt.slice(0, 10).replace(/-/g, ". ")}` : "예약 이력 없음"}
-                  </span>
-                </div>
-              </div>
-              <span className="text-[13px] text-[#52525B]">{c.phone}</span>
-              <span className="text-right text-[13.5px] font-semibold">{c.totalBookings}</span>
-              <div className="text-right">
-                {c.noShowCount === 0 ? (
-                  <span className="text-[13.5px] text-[#A1A1AA]">0</span>
-                ) : (
-                  <span
-                    className={cn(
-                      "inline-flex items-center rounded-full px-2.25 py-0.5 text-xs font-bold",
-                      risky ? "bg-[#D92D20]/9 text-[#B42318]" : "bg-[#F4F4F5] text-[#52525B]"
-                    )}
-                  >
-                    {c.noShowCount}
-                  </span>
+      {!customers && !loadError && (
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 rounded-xl" />
+          ))}
+        </div>
+      )}
+
+      {customers && (
+        <div className="overflow-hidden rounded-xl border border-[#E4E4E7]">
+          <div className="grid grid-cols-[1.4fr_1.2fr_0.8fr_0.8fr_90px] gap-4 border-b border-[#EFEFF2] bg-[#FAFAFA] px-4.5 py-2.75 text-xs font-semibold text-[#71717A]">
+            <span>이름</span>
+            <span>연락처</span>
+            <span className="text-right">총 예약수</span>
+            <span className="text-right">노쇼 횟수</span>
+            <span className="text-right">이력</span>
+          </div>
+
+          {filtered.map((c, i) => {
+            const risky = c.noShowCount >= 2;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setOpenId(c.id)}
+                className={cn(
+                  "grid w-full grid-cols-[1.4fr_1.2fr_0.8fr_0.8fr_90px] items-center gap-4 bg-white px-4.5 py-3.25 text-left",
+                  i !== filtered.length - 1 && "border-b border-[#F4F4F5]"
                 )}
-              </div>
-              <div className="text-right text-[12.5px] font-semibold whitespace-nowrap text-[#5B8CFF]">보기 ›</div>
-            </button>
-          );
-        })}
+              >
+                <div className="flex min-w-0 items-center gap-2.75">
+                  <Avatar name={c.name} />
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-[13.5px] font-semibold">{c.name}</span>
+                    <span className="text-[11.5px] text-[#A1A1AA]">
+                      {c.lastBookingAt ? `최근 ${c.lastBookingAt.slice(0, 10).replace(/-/g, ". ")}` : "예약 이력 없음"}
+                    </span>
+                  </div>
+                </div>
+                <span className="text-[13px] text-[#52525B]">{c.phone}</span>
+                <span className="text-right text-[13.5px] font-semibold">{c.totalBookings}</span>
+                <div className="text-right">
+                  {c.noShowCount === 0 ? (
+                    <span className="text-[13.5px] text-[#A1A1AA]">0</span>
+                  ) : (
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded-full px-2.25 py-0.5 text-xs font-bold",
+                        risky ? "bg-[#D92D20]/9 text-[#B42318]" : "bg-[#F4F4F5] text-[#52525B]"
+                      )}
+                    >
+                      {c.noShowCount}
+                    </span>
+                  )}
+                </div>
+                <div className="text-right text-[12.5px] font-semibold whitespace-nowrap text-[#5B8CFF]">보기 ›</div>
+              </button>
+            );
+          })}
 
-        {filtered.length === 0 && (
-          <div className="px-4 py-11 text-center text-[13px] text-[#A1A1AA]">검색 결과가 없습니다.</div>
-        )}
+          {filtered.length === 0 && (
+            <div className="px-4 py-11 text-center text-[13px] text-[#A1A1AA]">검색 결과가 없습니다.</div>
+          )}
 
-        <div className="flex items-center justify-between border-t border-[#EFEFF2] bg-[#FAFAFA] px-4.5 py-3">
-          <span className="text-xs text-[#A1A1AA]">
-            {filtered.length}명 표시 · 전체 {enriched.length}명
-          </span>
+          <div className="flex items-center justify-between border-t border-[#EFEFF2] bg-[#FAFAFA] px-4.5 py-3">
+            <span className="text-xs text-[#A1A1AA]">
+              {filtered.length}명 표시 · 전체 {all.length}명
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
-      <Dialog open={!!detail} onOpenChange={(open) => !open && setOpenId(null)}>
+      <Dialog open={!!detail} onOpenChange={(open) => !open && closeDetail()}>
         <DialogContent className="max-w-140 gap-0 rounded-3.5 p-0">
           {detail && (
             <>
@@ -139,20 +158,27 @@ export function CustomersContent() {
 
               <div className="grid grid-cols-3 gap-3 px-6.5 py-5">
                 <StatCard label="총 예약" value={`${detail.totalBookings}건`} />
-                <StatCard label="완료" value={`${detailBookings.filter((b) => b.status === "completed").length}건`} />
                 <StatCard
-                  label="노쇼"
-                  value={`${detail.noShowCount}건`}
-                  danger={detail.noShowCount > 0}
+                  label="완료"
+                  value={`${(detailBookings ?? []).filter((b) => b.status === "completed").length}건`}
                 />
+                <StatCard label="노쇼" value={`${detail.noShowCount}건`} danger={detail.noShowCount > 0} />
               </div>
 
               <div className="max-h-90 overflow-y-auto px-6.5 pb-6.5">
                 <h3 className="mb-3 text-[13px] font-semibold">예약 이력</h3>
-                <div className="flex flex-col">
-                  {detailBookings.map((b, i) => {
-                    const service = getService(b.serviceId);
-                    return (
+
+                {!detailBookings && (
+                  <div className="flex flex-col gap-2">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                      <Skeleton key={i} className="h-11 rounded-lg" />
+                    ))}
+                  </div>
+                )}
+
+                {detailBookings && (
+                  <div className="flex flex-col">
+                    {detailBookings.map((b, i) => (
                       <div
                         key={b.id}
                         className={cn(
@@ -161,16 +187,17 @@ export function CustomersContent() {
                         )}
                       >
                         <div className="flex min-w-0 flex-col gap-0.75">
-                          <span className="text-[13px] font-semibold">{service.name}</span>
+                          <span className="text-[13px] font-semibold">{b.serviceName}</span>
                           <span className="text-[11.5px] text-[#A1A1AA]">
-                            {formatDateTimeFull(b.scheduledAt)} · {formatPrice(service.price)}
+                            {formatDateTimeFull(b.scheduledAt)}
+                            {b.servicePrice != null ? ` · ${formatPrice(b.servicePrice)}` : ""}
                           </span>
                         </div>
                         <StatusBadge status={b.status} />
                       </div>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           )}

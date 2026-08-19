@@ -46,13 +46,8 @@ export const bookings = pgTable(
   (table) => [index("idx_bookings_service_scheduled").on(table.serviceId, table.scheduledAt)]
 );
 
-export const admins = pgTable("admins", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  name: text("name"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+// Admin identity/sessions live in the `neon_auth` schema (Neon Managed Auth),
+// not here — see docs/01_db.md §2.4.
 
 export const notificationLogs = pgTable("notification_logs", {
   id: uuid("id").primaryKey().defaultRandom(),

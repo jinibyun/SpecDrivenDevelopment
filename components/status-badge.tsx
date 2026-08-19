@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { BookingStatus } from "@/lib/mock-data";
+import type { BookingStatus } from "@/lib/types";
 
 const STATUS_META: Record<BookingStatus, { label: string; className: string }> = {
   pending: { label: "대기", className: "bg-[#5B8CFF]/12 text-[#3F6FE0]" },

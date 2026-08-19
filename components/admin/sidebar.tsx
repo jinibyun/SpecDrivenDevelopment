@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { SHOP_NAME } from "@/lib/mock-data";
+import { SHOP_NAME } from "@/lib/constants";
 
 const NAV_ITEMS = [
   { label: "대시보드", icon: "◧", href: "/admin/dashboard" },
@@ -11,7 +11,7 @@ const NAV_ITEMS = [
   { label: "고객", icon: "◍", href: "/admin/customers" },
 ] as const;
 
-export function AdminSidebar() {
+export function AdminSidebar({ adminEmail }: { adminEmail: string }) {
   const pathname = usePathname();
 
   return (
@@ -55,7 +55,7 @@ export function AdminSidebar() {
         </div>
         <div className="flex min-w-0 flex-col gap-px">
           <span className="text-[12.5px] font-semibold">{SHOP_NAME}</span>
-          <span className="text-[11px] text-white/42">admin@bookflow.app</span>
+          <span className="text-[11px] text-white/42">{adminEmail}</span>
         </div>
       </div>
     </aside>

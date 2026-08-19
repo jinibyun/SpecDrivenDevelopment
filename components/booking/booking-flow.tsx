@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ko } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
@@ -9,20 +9,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { SERVICES, SHOP_NAME, type Service } from "@/lib/mock-data";
-import { formatPrice, WEEKDAYS } from "@/lib/format";
-
-const BASE_SLOTS = [
-  "10:00", "10:30", "11:00", "11:30",
-  "13:00", "13:30", "14:00", "14:30",
-  "15:00", "15:30", "16:00", "16:30",
-  "17:00", "17:30",
-];
-
-// The demo dataset is anchored to this fixed "today" so availability stays deterministic.
-const TODAY = new Date(2026, 7, 17);
-
-type Slot = { label: string; taken: boolean };
+import { SHOP_NAME } from "@/lib/constants";
+import { formatPrice, toIsoDate, WEEKDAYS } from "@/lib/format";
+import { fetchJson } from "@/lib/fetch-json";
+import type { Service } from "@/lib/types";
 
 type Submitted = {
   bookingId: string;
@@ -31,27 +21,23 @@ type Submitted = {
 
 const STEP_LABELS = ["서비스", "날짜·시간", "정보 입력", "완료"];
 
-function toIsoDate(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function loadSlotsFor(isoDate: string, serviceId: string): Slot[] {
-  const service = SERVICES.find((s) => s.id === serviceId)!;
-  const step = service.durationMinutes >= 90 ? 3 : service.durationMinutes >= 60 ? 2 : 1;
-  const seed = [...(isoDate + serviceId)].reduce((sum, c) => sum + c.charCodeAt(0), 0);
-  return BASE_SLOTS.filter((_, i) => i % step === 0).map((label, i) => ({
-    label,
-    taken: (seed + i * 7) % 5 === 0,
-  }));
-}
+const TODAY = (() => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+})();
 
 export function BookingFlow() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+
+  const [services, setServices] = useState<Service[] | null>(null);
+  const [servicesError, setServicesError] = useState<string | null>(null);
   const [serviceId, setServiceId] = useState<string | null>(null);
-  const [month, setMonth] = useState(new Date(2026, 7, 1));
+
+  const [month, setMonth] = useState(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1));
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [time, setTime] = useState<string | null>(null);
-  const [slots, setSlots] = useState<Slot[]>([]);
+  const [slots, setSlots] = useState<string[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
 
   const [name, setName] = useState("");
@@ -59,22 +45,31 @@ export function BookingFlow() {
   const [email, setEmail] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
 
-  const service = serviceId ? SERVICES.find((s) => s.id === serviceId)! : null;
+  useEffect(() => {
+    fetchJson<Service[]>("/api/services").then((res) => {
+      if (res.error) setServicesError(res.error.message);
+      else setServices(res.data);
+    });
+  }, []);
+
+  const service = serviceId ? (services?.find((s) => s.id === serviceId) ?? null) : null;
   const whenLabel =
     date && time
       ? `${date.getMonth() + 1}월 ${date.getDate()}일 (${WEEKDAYS[date.getDay()]}) ${time}`
       : "";
 
-  function fetchSlots(nextDate: Date, nextServiceId: string) {
+  async function fetchSlots(nextDate: Date, nextServiceId: string) {
     setSlotsLoading(true);
     setSlots([]);
     setTime(null);
-    window.setTimeout(() => {
-      setSlots(loadSlotsFor(toIsoDate(nextDate), nextServiceId));
-      setSlotsLoading(false);
-    }, 750);
+    const res = await fetchJson<{ date: string; slots: string[] }>(
+      `/api/bookings/availability?serviceId=${nextServiceId}&date=${toIsoDate(nextDate)}`
+    );
+    setSlots(res.data?.slots ?? []);
+    setSlotsLoading(false);
   }
 
   function handleSelectService(id: string) {
@@ -88,16 +83,32 @@ export function BookingFlow() {
     if (serviceId) fetchSlots(nextDate, serviceId);
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!name.trim() || !phone.trim()) {
       setError("이름과 연락처는 필수 입력값입니다.");
       return;
     }
     setError(null);
-    setSubmitted({
-      bookingId: "bk_" + Math.random().toString(36).slice(2, 10),
-      service: service!,
+    setSubmitting(true);
+    const res = await fetchJson<{ bookingId: string; status: string }>("/api/bookings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        serviceId,
+        customer: { name, phone, email: email || undefined },
+        scheduledAt: `${toIsoDate(date!)}T${time}:00`,
+        note: note || undefined,
+      }),
     });
+    setSubmitting(false);
+
+    if (res.error) {
+      setError(res.error.message);
+      if (res.error.code === "SLOT_UNAVAILABLE" && date && serviceId) fetchSlots(date, serviceId);
+      return;
+    }
+
+    setSubmitted({ bookingId: res.data.bookingId, service: service! });
     setStep(4);
   }
 
@@ -128,7 +139,8 @@ export function BookingFlow() {
     setSubmitted(null);
   }
 
-  const nextDisabled = (step === 1 && !serviceId) || (step === 2 && !(date && time));
+  const nextDisabled =
+    (step === 1 && !serviceId) || (step === 2 && !(date && time)) || (step === 3 && submitting);
 
   return (
     <div className="min-h-screen bg-white">
@@ -149,41 +161,58 @@ export function BookingFlow() {
             <p className="mb-6 text-sm text-[#71717A]">
               원하시는 서비스를 고르면 예약 가능한 시간을 보여드립니다.
             </p>
-            <div className="flex flex-col gap-2.5">
-              {SERVICES.map((sv) => {
-                const selected = serviceId === sv.id;
-                return (
-                  <button
-                    key={sv.id}
-                    type="button"
-                    onClick={() => handleSelectService(sv.id)}
-                    className={cn(
-                      "flex items-center justify-between gap-4 rounded-xl border bg-white px-4.5 py-4.25 text-left transition-all",
-                      selected
-                        ? "border-[#5B8CFF] shadow-[0_0_0_3px_rgba(91,140,255,0.14)]"
-                        : "border-[#E4E4E7]"
-                    )}
-                  >
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[15px] font-semibold tracking-tight">{sv.name}</span>
-                      <span className="text-[13px] text-[#71717A]">
-                        {sv.durationMinutes}분 · {formatPrice(sv.price)}
-                      </span>
-                    </div>
-                    <div
+
+            {servicesError && (
+              <div className="rounded-[10px] border border-[#FECDCA] bg-[#FFFBFA] px-3.5 py-3 text-[13px] text-[#B42318]">
+                {servicesError}
+              </div>
+            )}
+
+            {!services && !servicesError && (
+              <div className="flex flex-col gap-2.5">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-19 rounded-xl" />
+                ))}
+              </div>
+            )}
+
+            {services && (
+              <div className="flex flex-col gap-2.5">
+                {services.map((sv) => {
+                  const selected = serviceId === sv.id;
+                  return (
+                    <button
+                      key={sv.id}
+                      type="button"
+                      onClick={() => handleSelectService(sv.id)}
                       className={cn(
-                        "flex h-5 w-5 flex-none items-center justify-center rounded-full border text-[11px]",
+                        "flex items-center justify-between gap-4 rounded-xl border bg-white px-4.5 py-4.25 text-left transition-all",
                         selected
-                          ? "border-[#5B8CFF] bg-[#5B8CFF] text-white"
-                          : "border-[#E4E4E7] text-transparent"
+                          ? "border-[#5B8CFF] shadow-[0_0_0_3px_rgba(91,140,255,0.14)]"
+                          : "border-[#E4E4E7]"
                       )}
                     >
-                      ✓
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[15px] font-semibold tracking-tight">{sv.name}</span>
+                        <span className="text-[13px] text-[#71717A]">
+                          {sv.durationMinutes}분{sv.price != null ? ` · ${formatPrice(sv.price)}` : ""}
+                        </span>
+                      </div>
+                      <div
+                        className={cn(
+                          "flex h-5 w-5 flex-none items-center justify-center rounded-full border text-[11px]",
+                          selected
+                            ? "border-[#5B8CFF] bg-[#5B8CFF] text-white"
+                            : "border-[#E4E4E7] text-transparent"
+                        )}
+                      >
+                        ✓
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -225,24 +254,21 @@ export function BookingFlow() {
 
               {!slotsLoading && slots.length > 0 && (
                 <div className="grid grid-cols-4 gap-2">
-                  {slots.map((s) => {
-                    const selected = time === s.label;
+                  {slots.map((label) => {
+                    const selected = time === label;
                     return (
                       <button
-                        key={s.label}
+                        key={label}
                         type="button"
-                        disabled={s.taken}
-                        onClick={() => setTime(s.label)}
+                        onClick={() => setTime(label)}
                         className={cn(
-                          "h-10 rounded-lg border text-[13px] font-semibold transition-colors",
-                          s.taken
-                            ? "cursor-default border-[#EFEFF2] bg-[#F4F4F5] text-[#C4C4CC] line-through"
-                            : selected
-                              ? "border-[#5B8CFF] bg-[#5B8CFF] text-white"
-                              : "cursor-pointer border-[#E4E4E7] bg-white text-[#09090B]"
+                          "h-10 cursor-pointer rounded-lg border text-[13px] font-semibold transition-colors",
+                          selected
+                            ? "border-[#5B8CFF] bg-[#5B8CFF] text-white"
+                            : "border-[#E4E4E7] bg-white text-[#09090B]"
                         )}
                       >
-                        {s.label}
+                        {label}
                       </button>
                     );
                   })}
@@ -254,11 +280,6 @@ export function BookingFlow() {
                   선택한 날짜에는 가능한 시간이 없습니다.
                 </div>
               )}
-
-              <p className="mt-3.5 flex items-center gap-1.5 text-xs text-[#A1A1AA]">
-                <span className="inline-block h-2.25 w-2.25 rounded-[3px] border border-[#E4E4E7] bg-[#F4F4F5]" />
-                회색 처리된 시간은 마감되었습니다
-              </p>
             </div>
           </div>
         )}
@@ -357,7 +378,7 @@ export function BookingFlow() {
               onClick={handleNext}
               className="h-11 rounded-lg px-5.5 text-sm font-semibold"
             >
-              {step === 3 ? "예약 요청하기" : "다음"}
+              {step === 3 ? (submitting ? "요청 중" : "예약 요청하기") : "다음"}
             </Button>
           </div>
         </div>
