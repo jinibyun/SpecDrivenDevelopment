@@ -18,7 +18,8 @@
 |---|---|
 | Framework | Next.js (App Router) |
 | Styling | Tailwind CSS + ShadCN |
-| Database | Neon DB (PostgreSQL, MCP로 연동) |
+| Database | Neon DB (PostgreSQL) |
+| ORM | Drizzle ORM (`drizzle-kit`으로 스키마/마이그레이션 관리) |
 | Hosting | Vercel |
 | Automation | n8n (알림 발송 · 챗봇 상담) |
 | AI Model | Claude (Sonnet 계열) |
