@@ -1,0 +1,104 @@
+name: Create Feature Spec from Issue
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  create-feature-md:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Generate Feature Spec File
+        env:
+          # Untrusted input goes through env vars, never directly into `run:` text.
+          # This avoids GitHub Actions script-injection via issue title/body.
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          set -euo pipefail
+
+          SAFE_TITLE=$(
+            printf '%s' "$ISSUE_TITLE" \
+            | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+          )
+          FILENAME="docs/features/feature_${ISSUE_NUMBER}_${SAFE_TITLE}.md"
+          mkdir -p docs/features
+
+          # Values are written via env vars ($ISSUE_TITLE / $ISSUE_BODY), never
+          # interpolated as raw ${{ }} text inside the heredoc.
+          cat > "$FILENAME" <<EOF
+          # [Feature #${ISSUE_NUMBER}] ${ISSUE_TITLE}
+
+          ---
+          > 🤖 **AI 코딩 에이전트 작업 지시서 (System Prompt)**
+          >
+          > 너는 이 프로젝트의 수석 개발자다. 마스터 스펙 문서
+          > (\`docs/00_spec.md\`, \`docs/01_db.md\`, \`docs/02_api.md\`,
+          > \`docs/03_ui.md\`, \`docs/04_automation.md\`)는 시스템 뼈대 파악을 위해
+          > 반드시 읽되, 이 작업 중에는 절대 직접 수정하지 마라.
+          >
+          > **[작업 3단계 프로세스 — 엄수할 것]**
+          > 1. **작업 중**: 이 Feature 문서의 요구사항과 마스터 문서(참조용)를 보고
+          >    코드를 짠다. 스택은 [Next.js(App Router) + Tailwind CSS + ShadCN +
+          >    Neon DB(Drizzle ORM) + Neon Managed Auth]로 고정한다.
+          > 2. **작업 완료 직후**: 마스터 문서는 건드리지 말고, 이 문서 하단
+          >    [반영된 최종 스펙]에 변경된 스펙만 요약 기록한다.
+          > 3. **PR 원칙**: 이 작업은 \`feature/issue-${ISSUE_NUMBER}\` 브랜치에서
+          >    진행되며, \`master\`에는 절대 직접 push하지 않는다. 모든 변경은 PR을
+          >    통해서만 병합되고, 병합 여부는 사람이 리뷰 후 결정한다.
+          > 4. **역동기화**: 마스터 문서 반영은 개발자가 별도의 '역동기화 프롬프트'를
+          >    내리기 전까지 보류한다.
+          ---
+
+          ## 1. 요구사항 명세 (Issue Content)
+
+          ${ISSUE_BODY}
+
+          ## 2. 배포 전 테스트 체크리스트
+
+          - [ ] 스모크 테스트 작성 (spec.md §9 정책)
+          - [ ] \`npx tsc --noEmit\` 통과
+          - [ ] \`npm run build\` 성공
+
+          ## 3. 반영된 최종 스펙 (AI 작업 결과물)
+
+          <!-- 코드 작업이 끝나면 변경된 스펙(DB/API/UI/Automation)을 여기에 요약. -->
+
+          ---
+          ### ⚠️ 개발자 전용 — 역동기화 프롬프트 템플릿 (복사해서 사용)
+
+          아래 프롬프트를 복사하여 새 채팅창에 입력하고 마스터 문서를 최신화하세요.
+
+          \`\`\`text
+          @docs/00_spec.md @docs/01_db.md @docs/02_api.md @docs/03_ui.md @docs/04_automation.md
+          @(현재 작업한 코드 폴더/파일들)
+
+          현재 구현된 실제 소스 코드를 정답으로 간주하고, 변경된 사항을 바탕으로
+          마스터 문서 5개를 최신화(덮어쓰기)해. 코드는 절대 수정하지 마.
+          \`\`\`
+          EOF
+
+          echo "Generated: $FILENAME"
+
+      - name: Commit and Push Feature Spec to master
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
+        run: |
+          set -euo pipefail
+          git add docs/features/
+          git commit -m "docs: auto-generate feature spec for issue #${{ github.event.issue.number }}"
+          git push origin HEAD:master
