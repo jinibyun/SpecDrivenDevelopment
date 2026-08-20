@@ -30,7 +30,8 @@ jobs:
           SAFE_TITLE=$(
             printf '%s' "$ISSUE_TITLE" \
             | tr '[:upper:]' '[:lower:]' \
-            | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//'
+            | tr -s ' \t' '-' \
+            | sed -E 's#[/\\:*?"<>|]+#-#g; s/-+/-/g; s/^-+//; s/-+$//'
           )
           FILENAME="docs/features/feature_${ISSUE_NUMBER}_${SAFE_TITLE}.md"
           mkdir -p docs/features
