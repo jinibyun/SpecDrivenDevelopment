@@ -36,7 +36,7 @@ jobs:
           mkdir -p docs/features
 
           # Values are written via env vars ($ISSUE_TITLE / $ISSUE_BODY), never
-          # interpolated as raw ${{ }} text inside the heredoc.
+          # interpolated as raw GitHub expression syntax inside the heredoc.
           cat > "$FILENAME" <<EOF
           # [Feature #${ISSUE_NUMBER}] ${ISSUE_TITLE}
 
