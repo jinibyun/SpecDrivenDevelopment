@@ -41,13 +41,23 @@
 
 ## 2. 배포 전 테스트 체크리스트
 
-- [ ] 스모크 테스트 작성 (spec.md §9 정책)
-- [ ] `npx tsc --noEmit` 통과
-- [ ] `npm run build` 성공
+- [x] 스모크 테스트 작성 (spec.md §9 정책)
+- [x] `npx tsc --noEmit` 통과
+- [x] `npm run build` 성공
 
 ## 3. 반영된 최종 스펙 (AI 작업 결과물)
 
-<!-- 코드 작업이 끝나면 변경된 스펙(DB/API/UI/Automation)을 여기에 요약. -->
+**UI**
+- `components/admin/sidebar.tsx`: 하단 프로필 영역(사이드바 footer)에 "로그아웃" 버튼 추가. 클릭 시 `authClient.signOut()`(Neon Managed Auth) 호출 → `/admin/login`으로 이동 + `router.refresh()`.
+- 별도의 신규 라우트/페이지는 없음. 로그아웃 API는 Neon Auth 프록시(`app/api/auth/[...path]`)가 기존과 동일하게 처리 (`POST /api/auth/sign-out` — Better Auth 표준 엔드포인트, 세션 관련 쿠키 4종을 `Max-Age=0`으로 만료시킴).
+- 세션 재확인은 기존 `proxy.ts`(matcher: `/admin/dashboard/:path*`, `/admin/customers/:path*`)가 매 요청마다 수행 — 로그아웃 후 뒤로가기/직접 URL 접근 모두 이 프록시에서 재차단됨. 이번 작업에서 인증 로직 자체는 변경하지 않음.
+
+**테스트**
+- `tests/admin-logout.spec.ts` (Playwright) 신규 추가: 로그인 → 세션 쿠키 존재 확인 → 로그아웃 클릭 → 세션 쿠키 삭제 확인 → `/admin/dashboard` 직접 접근 시 `/admin/login` 리다이렉트 확인. `npx playwright test`로 실행, 통과 확인함.
+- `playwright.config.ts` 신규 추가 (webServer가 기존 실행 중인 `next dev`(포트 3000)를 재사용하거나, 없으면 새로 띄움). `package.json`에 `test:e2e` 스크립트 추가.
+- `@playwright/test`를 devDependency로 신규 설치.
+
+**DB/API**: 변경 없음.
 
 ---
 ### ⚠️ 개발자 전용 — 역동기화 프롬프트 템플릿 (복사해서 사용)
