@@ -45,12 +45,13 @@
 ### 4.2 관리자 (Admin)
 ```
 로그인 → 대시보드 진입 → 예약 목록 확인 → 승인/거절 처리
-→ (예약일 임박 시) 자동 리마인드 발송 → 완료/노쇼 처리
+→ (예약일 임박 시) 자동 리마인드 발송 → 완료/노쇼 처리 → 로그아웃
 ```
 
 ## 5. Data Model (요약 — 상세는 `01_db.md`)
 
-핵심 엔티티: `Customers`, `Services`, `Bookings`, `Admins`, `NotificationLogs`
+핵심 엔티티: `Customers`, `Services`, `Bookings`, `NotificationLogs`
+관리자 계정/세션은 별도 테이블 없이 Neon Managed Auth(`neon_auth` 스키마)가 관리한다.
 
 - 한 명의 Customer는 여러 개의 Booking을 가짐 (1:N)
 - 한 개의 Booking은 하나의 Service에 속함 (N:1)
@@ -78,14 +79,16 @@
 
 ## 8. Automation Scope (n8n)
 
-- 예약 생성(`POST /api/bookings`) 이벤트 → n8n 웹훅 트리거 → 확인 메시지 자동 발송
-- 예약 시간 D-1 → n8n 스케줄 트리거 → 리마인드 발송
-- (확장) 고객 문의 메시지 → Claude API 호출 → 자동 응답
+- **[구현됨]** 예약 생성(`POST /api/bookings`) 이벤트 → n8n 웹훅 트리거(`N8N_BOOKING_WEBHOOK_URL`) → 확인 메시지 자동 발송 (fire-and-forget, 실패해도 API 응답에 영향 없음 — 상세는 `04_automation.md`)
+- 예약 시간 D-1 → n8n 스케줄 트리거 → 리마인드 발송 (미구현)
+- (확장) 고객 문의 메시지 → Claude API 호출 → 자동 응답 (미구현)
 
 ## 9. Testing Policy
 
 이슈 기반 개발 시, 기능 구현과 함께 스모크 테스트 1~2개를 함께 작성한다.
 예: `POST /api/bookings` 호출 시 올바른 상태 값(`pending`)으로 저장되는지 확인하는 테스트.
+
+**실제 적용**: Playwright(`@playwright/test`)로 `tests/*.spec.ts`에 작성하고 `npm run test:e2e`로 실행한다.
 
 ## 10. Out of Scope (This Demo)
 

@@ -60,7 +60,18 @@
 { "data": { "bookingId": "uuid", "status": "pending" } }
 ```
 
-**Side effect**: 생성 성공 시 n8n 웹훅 트리거 → 확인 메시지 발송
+**Side effect**: 생성 성공 시 n8n 웹훅(`N8N_BOOKING_WEBHOOK_URL`)으로 fire-and-forget POST (`await` 없이 `.catch()`만 — 실패해도 201 응답에는 영향 없고 `console.error`로만 로깅). 동시에 `notification_logs`에 `confirmation` 타입으로 내부 기록.
+
+Webhook payload:
+```json
+{
+  "bookingId": "uuid",
+  "customerName": "홍길동",
+  "customerEmail": "hong@example.com 또는 null",
+  "serviceName": "상담 30분",
+  "scheduledAt": "2026-08-25T10:00:00.000Z"
+}
+```
 
 ---
 

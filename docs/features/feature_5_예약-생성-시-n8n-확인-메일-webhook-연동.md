@@ -56,13 +56,26 @@ Webhook URL: https://n8n.kbusiness.ca/webhook/bookflow-confirmation
 
 ## 2. 배포 전 테스트 체크리스트
 
-- [ ] 스모크 테스트 작성 (spec.md §9 정책)
-- [ ] `npx tsc --noEmit` 통과
-- [ ] `npm run build` 성공
+- [x] 스모크 테스트 작성 (spec.md §9 정책)
+- [x] `npx tsc --noEmit` 통과
+- [x] `npm run build` 성공
 
 ## 3. 반영된 최종 스펙 (AI 작업 결과물)
 
-<!-- 코드 작업이 끝나면 변경된 스펙(DB/API/UI/Automation)을 여기에 요약. -->
+**API**
+- `app/api/bookings/route.ts`: `bookings` insert 성공 직후, `N8N_BOOKING_WEBHOOK_URL`이 설정돼 있으면 해당 URL로 `POST` 요청을 fire-and-forget(await 없이 `.catch()`만)으로 전송. 실패 시 `console.error`로만 로깅하고 응답에는 영향 없음.
+  - payload: `{ bookingId, customerName, customerEmail, serviceName, scheduledAt }`
+  - 기존 `notification_logs` insert(내부 감사 로그)는 그대로 유지 — webhook 호출과는 별개.
+
+**환경변수**
+- `N8N_BOOKING_WEBHOOK_URL=https://n8n.kbusiness.ca/webhook/bookflow-confirmation` — 로컬 `.env`에 등록함.
+- **Vercel 환경변수는 아직 등록하지 못했음** (이 세션에 Vercel 프로젝트 연결/로그인이 안 돼 있어 CLI로 직접 등록할 수 없었음). 배포 전 사람이 직접 Vercel 대시보드 → 프로젝트 → Settings → Environment Variables에서 `N8N_BOOKING_WEBHOOK_URL`을 등록해야 함.
+
+**테스트**
+- `tests/booking-webhook.spec.ts` (Playwright) 신규 추가: 실제로 예약을 생성해 API가 5초 이내에 `201`로 응답하는지 확인 (fire-and-forget이므로 외부 webhook 왕복을 기다리지 않아야 한다는 요구사항의 자동화된 증거). 실행 결과 1.9초에 통과.
+- webhook URL 자체가 살아있는지 별도로 `curl`로 확인함 (200 OK) — n8n Executions 탭 확인, 실제 메일 수신 확인은 사람이 수동으로 검증해야 하는 항목이라 이 세션에서는 확인하지 못함.
+
+**DB/UI**: 변경 없음.
 
 ---
 ### ⚠️ 개발자 전용 — 역동기화 프롬프트 템플릿 (복사해서 사용)

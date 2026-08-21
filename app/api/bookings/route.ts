@@ -62,7 +62,24 @@ export async function POST(request: NextRequest) {
     })
     .returning();
 
-  // Stand-in for the n8n confirmation webhook (docs/04_automation.md — out of scope here).
+  // n8n 예약 확인 메일 webhook — fire-and-forget. 실패해도 예약 생성 응답(201)에는 영향 없음 (Feature #5).
+  const webhookUrl = process.env.N8N_BOOKING_WEBHOOK_URL;
+  if (webhookUrl) {
+    fetch(webhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        bookingId: booking.id,
+        customerName: customer.name,
+        customerEmail: customer.email,
+        serviceName: service.name,
+        scheduledAt: booking.scheduledAt,
+      }),
+    }).catch((err) => {
+      console.error("n8n booking webhook failed:", err);
+    });
+  }
+
   await db.insert(notificationLogs).values({
     bookingId: booking.id,
     type: "confirmation",
