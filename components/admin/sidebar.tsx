@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { SHOP_NAME } from "@/lib/constants";
+import { authClient } from "@/lib/auth/client";
 
 const NAV_ITEMS = [
   { label: "대시보드", icon: "◧", href: "/admin/dashboard" },
@@ -13,6 +14,17 @@ const NAV_ITEMS = [
 
 export function AdminSidebar({ adminEmail }: { adminEmail: string }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function logout() {
+    try {
+      await authClient.signOut();
+    } catch {
+      // ignore — redirect regardless, proxy.ts re-checks the session server-side anyway
+    }
+    router.push("/admin/login");
+    router.refresh();
+  }
 
   return (
     <aside className="sticky top-0 flex h-screen w-59 flex-none flex-col bg-[#0F1117] px-3.5 py-5.5 text-white">
@@ -53,10 +65,18 @@ export function AdminSidebar({ adminEmail }: { adminEmail: string }) {
         <div className="flex h-7.5 w-7.5 flex-none items-center justify-center rounded-full bg-[#5B8CFF]/20 text-xs font-bold text-[#A9C2FF]">
           {SHOP_NAME.slice(0, 1)}
         </div>
-        <div className="flex min-w-0 flex-col gap-px">
+        <div className="flex min-w-0 flex-1 flex-col gap-px">
           <span className="text-[12.5px] font-semibold">{SHOP_NAME}</span>
-          <span className="text-[11px] text-white/42">{adminEmail}</span>
+          <span className="truncate text-[11px] text-white/42">{adminEmail}</span>
         </div>
+        <button
+          type="button"
+          onClick={logout}
+          title="로그아웃"
+          className="flex-none rounded-md px-1.5 py-1 text-[11px] font-medium text-white/40 transition-colors hover:bg-white/9 hover:text-white"
+        >
+          로그아웃
+        </button>
       </div>
     </aside>
   );
